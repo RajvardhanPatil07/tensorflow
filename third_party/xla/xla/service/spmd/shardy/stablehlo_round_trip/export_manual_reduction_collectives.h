@@ -24,11 +24,11 @@ namespace xla {
 namespace sdy {
 
 // Exports `sdy.all_reduce`, `sdy.reduce_scatter`, `sdy.sharded_to_unreduced`
-// and `sdy.replicated_to_unreduced` that originate from user-defined shardings
-// with unreduced axes. The exported ops are inside a full manual
-// `sdy.manual_computation`.
-std::unique_ptr<mlir::Pass>
-createStablehloExportManualReductionCollectivesPass();
+// and `sdy.replicated_to_unreduced` and (optionally) `sdy.reduce_scatter`
+// that originate from user-defined shardings with unreduced axes. The exported
+// ops are inside a full manual `sdy.manual_computation`.
+std::unique_ptr<mlir::Pass> createStablehloExportManualReductionCollectivesPass(
+    bool exportReduceScatter = false);
 
 // Registers the xla-sdy-stablehlo-export-manual-reduction-collectives pass.
 void registerStablehloExportManualReductionCollectivesPass();
