@@ -22,7 +22,11 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Set up shared custom sources
 apt-get update
-apt-get install -y gnupg ca-certificates
+apt-get install -y gnupg ca-certificates software-properties-common
+
+# Add Ubuntu Toolchain PPA for newer GCC/libstdc++.
+# We call `apt-get update` with retry logic later, so pass `--no-update` here.
+add-apt-repository -y --no-update ppa:ubuntu-toolchain-r/test
 
 # Deadsnakes: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776
