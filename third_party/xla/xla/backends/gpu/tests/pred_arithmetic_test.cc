@@ -16,8 +16,9 @@ limitations under the License.
 #include <optional>
 
 #include <gtest/gtest.h>
-#include "xla/backends/gpu/tests/gpu_codegen_test.h"
+#include "xla/backends/gpu/tests/gpu_pjrt_codegen_test.h"
 #include "xla/literal_util.h"
+#include "xla/tests/hlo_pjrt_interpreter_reference_mixin.h"
 #include "tsl/platform/statusor.h"
 
 namespace xla {
@@ -25,7 +26,8 @@ namespace gpu {
 
 namespace {
 
-class PredArithmeticTest : public GpuCodegenTest {
+class PredArithmeticTest
+    : public HloPjRtInterpreterReferenceMixin<GpuPjRtCodegenTest> {
  protected:
   void RunAndCompareTruthTable(const char* const hlo_text) {
     auto false_literal = LiteralUtil::CreateR0(false);

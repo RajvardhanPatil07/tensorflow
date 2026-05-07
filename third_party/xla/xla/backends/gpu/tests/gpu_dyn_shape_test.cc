@@ -15,7 +15,8 @@ limitations under the License.
 #include <utility>
 
 #include <gtest/gtest.h>
-#include "xla/backends/gpu/tests/gpu_codegen_test.h"
+#include "absl/status/status_matchers.h"
+#include "xla/backends/gpu/tests/gpu_pjrt_codegen_test.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/shape.h"
@@ -24,7 +25,7 @@ limitations under the License.
 
 namespace xla {
 namespace gpu {
-class GpuDynamicShapeTest : public GpuCodegenTest {};
+class GpuDynamicShapeTest : public GpuPjRtCodegenTest {};
 
 TEST_F(GpuDynamicShapeTest, DynamicShapeR2) {
   HloComputation::Builder builder(TestName());
@@ -39,8 +40,8 @@ TEST_F(GpuDynamicShapeTest, DynamicShapeR2) {
   auto hlo_module = CreateNewVerifiedModule();
   hlo_module->AddEntryComputation(builder.Build());
 
-  CompileAndVerifyIr(std::move(hlo_module),
-                     R"(
+  EXPECT_OK(CompileAndVerifyIr(std::move(hlo_module),
+                               R"(
 ; CHECK-DAG: is_thread_0-true
 ; CHECK-DAG: x.padded{{.*}}.in_dyn_bounds-true
 ; CHECK-DAG: x.padded{{.*}}.in_bounds-true
@@ -50,7 +51,7 @@ TEST_F(GpuDynamicShapeTest, DynamicShapeR2) {
 ; CHECK: %[[linear_index_in_range:.*]] = icmp ult i32 %[[linear_index:.*]],
 ; CHECK: store i32 %[[dyn_dim_size:.*]], ptr
       )",
-                     /*match_optimized_ir=*/false);
+                               /*match_optimized_ir=*/false));
 }
 
 }  // namespace gpu

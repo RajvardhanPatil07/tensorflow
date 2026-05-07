@@ -16,7 +16,7 @@ limitations under the License.
 #include <memory>
 
 #include <gtest/gtest.h>
-#include "xla/backends/gpu/tests/gpu_codegen_test.h"
+#include "xla/backends/gpu/tests/gpu_pjrt_codegen_test.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
@@ -32,7 +32,7 @@ namespace xla {
 namespace gpu {
 namespace {
 
-class GpuFtzTest : public GpuCodegenTest {
+class GpuFtzTest : public GpuPjRtCodegenTest {
  public:
   explicit GpuFtzTest(bool ftz) : ftz_(ftz) {}
 
