@@ -250,9 +250,89 @@ AliasInfo::GetInPlaceInputOutputPairs(const HloInstruction* user) const {
       ShapeIndex output_shape_index = pair.first;
       int64_t operand_index = pair.second.first;
       ShapeIndex operand_shape_index = pair.second.second;
-      in_place_pairs.push_back(
-          {HloOperandIndex{operand_index, {operand_shape_index}},
-           output_shape_index});
+
+      // Only alias if the logical operand is actually passed as a physical
+      // operand of this async-start instruction.
+      // Only alias if the logical operand is actually passed as a physical
+      // operand of this async-start instruction AND the output index is valid
+      // in the current shape (it might not be bound yet in late binding).
+      if (operand_index < user->operand_count() &&
+          ShapeUtil::IndexIsValid(user->shape(), output_shape_index)) {
+        in_place_pairs.push_back(
+            {HloOperandIndex{operand_index, {operand_shape_index}},
+             output_shape_index});
+      }
+    }
+    return in_place_pairs;
+  }
+  if (user->opcode() == HloOpcode::kAsyncUpdate) {
+    std::vector<std::pair<HloOperandIndex, ShapeIndex>> in_place_pairs;
+    const Shape& prev_shape = user->operand(0)->shape();
+
+    // Alias output_result: operand 0 at {1} with output at {1}
+    in_place_pairs.push_back({HloOperandIndex{0, {1}}, {1}});
+
+    // Alias sflag: operand 0 at {2} with output at {2} (if present)
+    if (ShapeUtil::TupleElementCount(prev_shape) > 2 &&
+        ShapeUtil::TupleElementCount(user->shape()) > 2) {
+      in_place_pairs.push_back({HloOperandIndex{0, {2}}, {2}});
+    }
+
+    return in_place_pairs;
+  }
+  if (user->opcode() == HloOpcode::kAsyncDone) {
+    std::vector<std::pair<HloOperandIndex, ShapeIndex>> in_place_pairs;
+    const Shape& prev_shape = user->operand(0)->shape();
+    CHECK(prev_shape.IsTuple() &&
+          ShapeUtil::TupleElementCount(prev_shape) >= 2);
+    CHECK(prev_shape.tuple_shapes(0).IsTuple());
+
+    // Default aliasing for results, ONLY if bound in the chain.
+    if (!(prev_shape.tuple_shapes(1).IsTuple() &&
+          ShapeUtil::TupleElementCount(prev_shape.tuple_shapes(1)) == 0)) {
+      ShapeUtil::ForEachLeafShape(user->shape(), [&](const Shape& sub_shape,
+                                                     const ShapeIndex& index) {
+        ShapeIndex operand_index = {1};
+        operand_index.insert(operand_index.end(), index.begin(), index.end());
+        in_place_pairs.push_back({HloOperandIndex{0, operand_index}, index});
+      });
+    }
+
+    // Additional logic for late-bound result-to-parameter aliasing:
+    const HloInstruction* start = user->async_chain_start();
+    CHECK_EQ(start->opcode(), HloOpcode::kAsyncStart);
+    const auto& aliasing_pairs =
+        Cast<HloAsyncStartInstruction>(start)->output_to_operand_aliasing();
+
+    for (const auto& pair : aliasing_pairs) {
+      const ShapeIndex& start_output_index = pair.first;
+      int64_t logical_param = pair.second.first;
+      const ShapeIndex& param_subindex = pair.second.second;
+
+      // We only care about result-to-parameter aliasing.
+      if (!start_output_index.empty() && start_output_index[0] == 1) {
+        ShapeIndex result_subindex;
+        result_subindex.insert(result_subindex.end(),
+                               start_output_index.begin() + 1,
+                               start_output_index.end());
+
+        // Alias async-done output at {result_subindex}
+        // with async-done operand 0 (the chain) at
+        // {0, logical_param, param_subindex}.
+        ShapeIndex chain_index = {0, logical_param};
+        chain_index.insert(chain_index.end(), param_subindex.begin(),
+                           param_subindex.end());
+
+        in_place_pairs.push_back(
+            {HloOperandIndex{0, chain_index}, result_subindex});
+      } else {
+        LOG(ERROR)
+            << "output_index (" << start_output_index.ToString()
+            << ") in aliasing config for async operations invalid "
+               "and ignored, reason:"
+            << ", it should be an non-empty index pointing to output subshape "
+               "({1,...})";
+      }
     }
     return in_place_pairs;
   }
