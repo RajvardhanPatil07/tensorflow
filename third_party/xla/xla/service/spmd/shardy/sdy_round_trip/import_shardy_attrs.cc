@@ -273,7 +273,12 @@ void convertShardyAttrsWithoutHloShardingV3(FuncOp funcOp,
       if (auto sharding =
               parseStringAttr<TensorShardingAttr>(dictAttr, attributeName)) {
         funcOp.setArgAttr(argNum, kShardingAttr, sharding);
-        removeFrontendAttribute(funcOp, attributeName, argNum);
+        removeFrontendAttribute(
+            dictAttr, attributeName,
+            [&](llvm::ArrayRef<NamedAttribute> newDict) {
+              setFuncArgFrontendAttrs(funcOp, argNum, newDict);
+            },
+            [&]() { funcOp.removeArgAttr(argNum, kFrontendAttributesAttr); });
       }
     }
     funcOp.removeArgAttr(argNum, kXlaShardingAttr);
