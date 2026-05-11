@@ -30,6 +30,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/ir/hlo_print_options.h"
 #include "xla/hlo/ir/stack_frames.h"
+#include "xla/hlo/parser/hlo_parser.h"
 #include "xla/hlo/testlib/hlo_hardware_independent_test_base.h"
 #include "xla/hlo/transforms/simplifiers/hlo_dce.h"
 #include "xla/printer.h"
@@ -579,6 +580,73 @@ TEST_F(HloInstructionTest, PrecisionConfigMethodConsistency) {
       HloInstruction::CreateDot(ShapeUtil::MakeShape(F32, {2, 2}), lhs.get(),
                                 rhs.get(), dnums, PrecisionConfig());
   EXPECT_TRUE(dot->SupportsPrecisionConfig());
+}
+
+TEST_F(HloInstructionTest, CloneSharesBackendConfig) {
+  std::string json = "{\"foo\": 5}";
+
+  HloConstantInstruction instr(ShapeUtil::MakeShape(U32, {3, 2}));
+  instr.set_raw_backend_config_string(json);
+
+  auto clone = instr.Clone();
+
+  EXPECT_EQ(&instr.raw_backend_config_string(),
+            &clone->raw_backend_config_string());
+}
+
+TEST_F(HloInstructionTest, MutateBackendConfigCOW) {
+  std::string json = "{}";
+
+  HloConstantInstruction instr(ShapeUtil::MakeShape(U32, {3, 2}));
+  instr.set_raw_backend_config_string(json);
+
+  auto clone = instr.Clone();
+
+  EXPECT_EQ(&instr.raw_backend_config_string(),
+            &clone->raw_backend_config_string());
+
+  auto status =
+      clone->MutateBackendConfig<OpMetadata>([](OpMetadata* metadata) {
+        metadata->set_op_name("mutated");
+        return absl::OkStatus();
+      });
+  ASSERT_TRUE(status.ok());
+
+  EXPECT_NE(&instr.raw_backend_config_string(),
+            &clone->raw_backend_config_string());
+  EXPECT_EQ(instr.raw_backend_config_string(), "{}");
+}
+
+TEST_F(HloInstructionTest, TextParserInternsBackendConfig) {
+  constexpr absl::string_view kHlo = R"(
+HloModule main
+
+ENTRY main {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT custom-call.1 = f32[] custom-call(p0),
+                       custom_call_target="target",
+                       backend_config="{\"foo\": 6}"
+  custom-call.2 = f32[] custom-call(p1),
+                       custom_call_target="target",
+                       backend_config="{\"foo\": 6}"
+})";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(kHlo));
+
+  HloInstruction* cc1 = nullptr;
+  HloInstruction* cc2 = nullptr;
+  for (auto* instr : module->entry_computation()->instructions()) {
+    if (instr->name() == "custom-call.1") cc1 = instr;
+    if (instr->name() == "custom-call.2") cc2 = instr;
+  }
+
+  ASSERT_NE(cc1, nullptr);
+  ASSERT_NE(cc2, nullptr);
+
+  EXPECT_EQ(&cc1->raw_backend_config_string(),
+            &cc2->raw_backend_config_string());
 }
 
 }  // namespace
